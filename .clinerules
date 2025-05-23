@@ -1,209 +1,87 @@
-# Cline Project Intelligence - Agentic Data Analysis
+# Cline AI Working Guidelines - Agentic Data Analysis
 
-## Project Overview
-This is an AI-powered data analysis system built with LangGraph and Streamlit. It provides conversational data analysis through a sophisticated agent architecture, primarily focused on financial data analysis and fraud detection.
+## Essential AI Instructions
 
-## Critical Implementation Paths
+### 1. Always Read Memory Bank First
+**CRITICAL**: Before any work, read ALL memory bank files to understand current project state:
+- `memory-bank/activeContext.md` - Current work focus and recent changes
+- `memory-bank/progress.md` - What's working and what's built
+- `memory-bank/systemPatterns.md` - Architecture and design patterns
+- `memory-bank/techContext.md` - Technical stack and implementation details
 
-### 1. LangGraph Agent Architecture
-**Key Pattern**: State-driven agent with conditional routing
+### 2. Critical Code Patterns (MUST FOLLOW)
+
+#### Token Tracking Integration
 ```python
-# Core pattern for agent nodes
-def call_model(state: AgentState):
-    # Always create data summary first
-    current_data_message = HumanMessage(content=create_data_summary(state))
-    messages = [current_data_message] + state["messages"]
-    
-    # Limit context to prevent overflow
-    if len(messages) > 10:
-        messages = messages[:10]
-    
-    return {"messages": [llm_outputs], "intermediate_outputs": [...]}
+# ALWAYS include token tracking in agent calls
+global token_callback
+token_callback = TokenUsageCallback()
+llm_outputs = model.invoke(state, config={"callbacks": [token_callback]})
 ```
 
-**Critical**: The agent MUST receive data context in every call. The `create_data_summary()` function is essential for providing dataset information to the LLM.
-
-### 2. Python Execution Environment
-**Key Pattern**: Persistent variable management with sandboxing
+#### Dynamic Dataset Discovery
 ```python
-# Global persistence pattern
-persistent_vars = {}  # Module-level global
-
-# In tool execution
-exec_globals = globals().copy()
-exec_globals.update(persistent_vars)  # Inject previous state
-exec_globals.update(current_variables)  # Add current datasets
-
-exec(python_code, exec_globals)
-
-# Extract and persist new variables
-persistent_vars.update({k: v for k, v in exec_globals.items() if k not in globals()})
+# NEVER assume dataset names - always use dynamic discovery
+available_datasets = [var for var in locals() if var.startswith('dataset_')]
+print(f"Found {len(available_datasets)} datasets: {available_datasets}")
 ```
 
-**Critical**: Variables MUST persist between tool calls for iterative analysis. The `persistent_vars` global is the key to maintaining state.
-
-### 3. Visualization Storage Strategy
-**Key Pattern**: JSON-first with pickle fallback
+#### User-Friendly Error Handling
 ```python
-# Always try JSON first for web compatibility
-try:
-    figure_json = pio.to_json(figure)
-    with open(json_filename, 'w') as f:
-        f.write(figure_json)
-except Exception:
-    # Fallback to pickle for complex objects
-    with open(pickle_filename, 'wb') as f:
-        pickle.dump(figure, f)
+# Always provide contextual error guidance
+if "recursion" in error_message.lower():
+    st.error("🔄 Analysis too complex. Try simpler questions.")
+# Include technical details in expander for debugging
 ```
 
-**Critical**: The hybrid approach handles Period objects and other complex types that break JSON serialization.
+### 3. Development Guidelines
 
-## User Preferences and Workflow
+#### When Making Changes:
+1. **Test token tracking** - Ensure usage monitoring works
+2. **Validate multi-dataset support** - Test with various file combinations  
+3. **Check error handling** - Verify user-friendly messages
+4. **Update memory bank** - Document significant changes
 
-### Data Analysis Approach
-- **Iterative Exploration**: Users prefer building on previous analysis rather than starting fresh
-- **Transparency**: Debug view is heavily used - users want to see the AI's reasoning
-- **Visual Focus**: Plotly visualizations are central to user experience
-- **Natural Language**: Users ask business questions, not technical queries
+#### When Adding Features:
+1. **Follow established patterns** from memory-bank/systemPatterns.md
+2. **Integrate token tracking** from the start
+3. **Maintain error recovery** with user guidance
+4. **Update relevant memory bank files**
 
-### Common User Patterns
-1. **Upload → Describe → Explore**: Users upload data, add descriptions, then start asking questions
-2. **Drill-down Analysis**: Start broad, then focus on specific patterns or anomalies
-3. **Comparison Queries**: "Compare X vs Y" or "Show me differences between groups"
-4. **Trend Analysis**: Time-based questions about patterns and changes
+#### When Debugging:
+1. **Check Token Usage tab** - Monitor costs and patterns
+2. **Use Debug tab** - Review AI reasoning and execution
+3. **Verify dataset discovery** - Ensure dynamic naming works
+4. **Consult memory bank** - Review known challenges and solutions
 
-### Effective Query Types
-- "Show me patterns in fraudulent transactions"
-- "How can I segment my customers?"
-- "What are the main factors that predict fraud?"
-- "Are there any unusual patterns in the data?"
+### 4. Project-Specific Rules
 
-## Project-Specific Patterns
+- **Dataset Naming**: Always use `dataset_0`, `dataset_1`, etc. (never assume specific names)
+- **Error Messages**: User-friendly with technical details in expanders
+- **Smart Suggestions**: File-type aware recommendations (financial, customer, sales)
+- **Recursion Limit**: Set to 25 with intelligent fallback guidance
+- **Model Configuration**: Use environment variables for flexibility
 
-### Data Loading Strategy
-**Pattern**: Automatic dataset naming with relationship detection
-```python
-# Datasets are automatically named dataset_0, dataset_1, etc.
-for input_dataset in graph_state["input_data"]:
-    df = pd.read_csv(input_dataset.data_path)
-    var_name = f"dataset_{len(datasets)}"
-    current_variables[var_name] = df
-```
+### 5. Memory Bank Updates
 
-**Why**: Simplifies variable management and prevents naming conflicts.
+When user requests "update memory bank":
+1. **Review ALL memory bank files** (even if no changes needed)
+2. **Focus on activeContext.md and progress.md** for current state
+3. **Document new patterns** in systemPatterns.md
+4. **Update technical details** in techContext.md
 
-### Error Handling Philosophy
-**Pattern**: Graceful degradation with partial results
-```python
-except Exception as e:
-    if "recursion" in str(e).lower():
-        return {"partial_result": True, "messages": partial_messages}
-```
+## Quick Reference
 
-**Why**: Users prefer partial insights over complete failures.
+**Memory Bank Structure**:
+- `activeContext.md` - Current work and recent changes
+- `progress.md` - What works, what's built, what's left
+- `systemPatterns.md` - Architecture and design patterns  
+- `techContext.md` - Technical stack and implementation
+- `projectbrief.md` - Core requirements and goals
+- `productContext.md` - Why project exists, problems solved
 
-### State Management
-**Pattern**: Immutable state updates through return values
-```python
-# Never mutate state directly
-def node_function(state):
-    # Process state
-    return {"key": "updated_value"}  # Return updates only
-```
+**Key Technologies**: Streamlit, LangGraph, OpenAI API, Plotly, Pandas
+**Architecture**: 4-tab UI (Data, Chat, Debug, Token Usage) + Professional AI Agent
+**Core Features**: Smart suggestions, token analytics, multi-dataset support, error recovery
 
-**Why**: LangGraph requires immutable state transitions for proper orchestration.
-
-## Known Challenges and Solutions
-
-### 1. Memory Management
-**Challenge**: Large datasets can cause memory issues
-**Solution**: Implement chunking pattern in backend.py
-```python
-chunk_size = min(1000, len(input_state["input_data"]))
-data_chunks = [input_state["input_data"][i:i + chunk_size] ...]
-```
-
-### 2. Context Window Limits
-**Challenge**: Long conversations exceed LLM context limits
-**Solution**: Message truncation in call_model
-```python
-if len(messages) > 10:  # Keep last 10 messages
-    messages = messages[:10]
-```
-
-### 3. Complex Object Serialization
-**Challenge**: Plotly figures with Period objects break JSON
-**Solution**: Conversion utility in tools.py
-```python
-def convert_periods(obj):
-    if isinstance(obj, pd.Period):
-        return str(obj)
-    # ... recursive conversion
-```
-
-## Tool Usage Patterns
-
-### Streamlit Development
-- **Session State**: Critical for maintaining UI state between interactions
-- **File Upload**: Always check for existing uploads directory
-- **Tab Organization**: Data Management → Chat → Debug is the preferred flow
-
-### LangGraph Development
-- **State Definition**: Always use TypedDict for clear state structure
-- **Node Functions**: Return state updates, never mutate input state
-- **Conditional Edges**: Use Literal types for clear routing logic
-
-### Python Execution
-- **Library Restrictions**: Only pandas, sklearn, plotly allowed for security
-- **Output Capture**: Always use print() for visible results
-- **Variable Naming**: Use descriptive names that persist across calls
-
-## Evolution of Project Decisions
-
-### Architecture Evolution
-1. **Started with LangChain**: Moved to LangGraph for better state management
-2. **File Storage**: Chose local over database for MVP simplicity
-3. **Visualization**: Plotly chosen over matplotlib for interactivity
-4. **UI Framework**: Streamlit selected for rapid prototyping
-
-### Security Considerations
-- **API Key**: Currently hardcoded (development only) - needs environment variable
-- **Code Execution**: Sandboxed with limited imports
-- **File Access**: Restricted to designated directories
-- **Input Validation**: Basic CSV validation, needs enhancement
-
-## Future Development Insights
-
-### High-Impact Improvements
-1. **Async Processing**: Would dramatically improve user experience
-2. **Multi-dataset Joins**: Users frequently ask about relationships between datasets
-3. **Export Capabilities**: Users want to share visualizations and insights
-4. **Query Suggestions**: AI-powered next question recommendations
-
-### Technical Debt Priorities
-1. **Environment Configuration**: Move from hardcoded to environment variables
-2. **Error Handling**: More user-friendly error messages
-3. **Performance Monitoring**: Add metrics and health checks
-4. **Input Validation**: Enhanced sanitization and validation
-
-## Working Effectively with This Project
-
-### When Making Changes
-1. **Always test with sample data**: Use the financial datasets in data_dictionary.json
-2. **Check variable persistence**: Ensure Python variables survive between tool calls
-3. **Validate visualization storage**: Confirm both JSON and pickle paths work
-4. **Test error scenarios**: Verify graceful degradation works
-
-### When Adding Features
-1. **Follow state-driven pattern**: Use LangGraph state management properly
-2. **Maintain sandboxing**: Don't add unsafe library imports
-3. **Consider user workflow**: How does this fit the upload → describe → explore pattern?
-4. **Document in memory bank**: Update relevant memory bank files
-
-### When Debugging
-1. **Use debug tab**: Streamlit debug view shows intermediate outputs
-2. **Check logs**: Structured logging provides detailed execution info
-3. **Verify state**: Ensure state transitions are working correctly
-4. **Test persistence**: Confirm variables are maintained across calls
-
-This project represents a sophisticated balance between AI capabilities, user experience, and technical constraints. The key to success is maintaining the conversational, iterative nature while ensuring robust execution and clear transparency.
+This .clinerules file provides essential AI working guidance while the memory-bank/ contains comprehensive project documentation.
