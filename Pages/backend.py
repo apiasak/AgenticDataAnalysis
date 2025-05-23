@@ -35,15 +35,8 @@ class PythonChatbot:
         workflow.add_edge('tools', 'agent')
         workflow.set_entry_point('agent')
         
-        # Configure graph with optimizations
+        # Configure graph with optimized settings
         compiled_graph = workflow.compile()
-        compiled_graph.config = {
-            "batch_requests": True,
-            "max_parallel_requests": 1,
-            "request_timeout": 30,
-            "cache_responses": True,
-            "rate_limit": "10/60s"  # 10 requests per minute
-        }
         return compiled_graph
     
     def user_sent_message(self, user_query, input_data: List[InputData]):
@@ -56,7 +49,8 @@ class PythonChatbot:
                 return {
                     "messages": [HumanMessage(content="No data available. Please load data first.")],
                     "output_image_paths": [],
-                    "intermediate_outputs": []
+                    "intermediate_outputs": [],
+                    "token_usage": None
                 }
 
             starting_image_paths_set = set(sum(self.output_image_paths.values(), []))
@@ -69,86 +63,111 @@ class PythonChatbot:
 
             logger.info("Invoking graph with input state")
             try:
-                # Validate and chunk data for batch processing
+                # Validate data loading
                 if not input_state["data_loaded"]:
                     return {
                         "messages": [HumanMessage(content="Data not loaded. Please load data first.")],
                         "output_image_paths": [],
-                        "intermediate_outputs": []
+                        "intermediate_outputs": [],
+                        "token_usage": None
                     }
 
-                # Split data into manageable chunks
-                chunk_size = min(1000, len(input_state["input_data"]))
-                data_chunks = [
-                    input_state["input_data"][i:i + chunk_size]
-                    for i in range(0, len(input_state["input_data"]), chunk_size)
-                ]
-
-                results = []
-                for chunk in data_chunks:
-                    chunk_state = {
-                        **input_state,
-                        "input_data": chunk,
-                        "is_last_chunk": chunk == data_chunks[-1]
-                    }
-                    
-                    try:
-                        result = self.graph.invoke(chunk_state, {
-                            "recursion_limit": 15,  # Increased from 8
-                            "stop_conditions": {
-                                "max_messages": 5,  # Increased from 3
-                                "min_response_quality": 0.7,  # Lowered threshold
-                                "max_depth": 8,  # Increased from 5
-                                "data_available": True,
-                                "max_recursion": 15,
-                                "early_termination": {
-                                    "min_quality_delta": 0.01,
-                                    "max_quality_plateau": 3
-                                }
-                            },
-                            "debug": {
-                                "log_recursion": True,
-                                "log_stop_conditions": True,
-                                "log_data_state": True,
-                                "log_quality_metrics": True
-                            },
-                            "retry": {
-                                "max_attempts": 3,
-                                "delay": 1.0
-                            },
-                            "recursion": {
-                                "track_progress": True,
-                                "early_exit": {
-                                    "quality_threshold": 0.85,
-                                    "max_attempts": 5
-                                }
-                            }
-                        })
-                    except Exception as e:
-                        if "recursion" in str(e).lower():
-                            logger.warning(f"Recursion limit reached, returning partial results: {str(e)}")
-                            return {
-                                "messages": chunk_state["messages"],
-                                "output_image_paths": [],
-                                "intermediate_outputs": [],
-                                "partial_result": True
-                            }
-                        raise
-                    results.append(result)
-
-                # Combine results from all chunks
-                combined_result = {
-                    "messages": sum((r["messages"] for r in results), []),
-                    "output_image_paths": list(set().union(*(r["output_image_paths"] for r in results))),
-                    "intermediate_outputs": sum((r["intermediate_outputs"] for r in results), [])
+                # Initialize token usage tracking
+                total_token_usage = {
+                    "total_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "estimated_cost": 0.0,
+                    "model": "",
+                    "requests": 0
                 }
+                
+                try:
+                    # Use higher recursion limit with proper error handling
+                    result = self.graph.invoke(input_state, {
+                        "recursion_limit": 25,  # Increased to handle complex analysis
+                        "configurable": {
+                            "thread_id": f"session_{int(time.time())}"
+                        }
+                    })
+                    
+                    # Accumulate token usage
+                    if "token_usage" in result and result["token_usage"]:
+                        token_info = result["token_usage"]
+                        total_token_usage["total_tokens"] = token_info.get("total_tokens", 0)
+                        total_token_usage["prompt_tokens"] = token_info.get("prompt_tokens", 0)
+                        total_token_usage["completion_tokens"] = token_info.get("completion_tokens", 0)
+                        total_token_usage["estimated_cost"] = token_info.get("estimated_cost", 0.0)
+                        total_token_usage["model"] = token_info.get("model", "")
+                        total_token_usage["requests"] = 1
+                        
+                except Exception as e:
+                    if "recursion" in str(e).lower():
+                        logger.warning(f"Recursion limit reached even with limit 25: {str(e)}")
+                        
+                        # Create a more helpful response when recursion limit is still hit
+                        simplified_response = f"""I understand you want to analyze your data, but the analysis is quite complex and requires many steps. 
+
+**What happened**: The analysis needed more than 25 processing steps, which suggests a very complex query.
+
+**Let me help you break this down**:
+
+1. **Start Simple**: Try these basic questions first:
+   - "What does my data look like?" 
+   - "Show me the column names and data types"
+   - "Display the first 5 rows of my data"
+
+2. **Then Build Up**: Once we see the data structure:
+   - "Create a simple chart of [column name]"
+   - "Show me basic statistics for [column name]"
+   - "What are the unique values in [column name]?"
+
+3. **Advanced Analysis**: After understanding the basics:
+   - "Find patterns in [specific columns]"
+   - "Compare [column A] vs [column B]"
+
+**Your original question**: "{user_query}"
+**Suggestion**: Try breaking this into 2-3 smaller, more specific questions.
+
+Would you like to start with a basic data overview?"""
+
+                        return {
+                            "messages": input_state["messages"] + [HumanMessage(content=simplified_response)],
+                            "output_image_paths": [],
+                            "intermediate_outputs": [f"Recursion limit (25) reached: {str(e)}"],
+                            "token_usage": total_token_usage if total_token_usage["requests"] > 0 else None
+                        }
+                    else:
+                        raise
+
+                # Add token usage to result
+                if total_token_usage["requests"] > 0:
+                    result["token_usage"] = total_token_usage
+                
             except Exception as e:
                 logger.error(f"Graph processing error: {str(e)}")
-                # Return partial results if available
-                if hasattr(e, 'partial_result'):
-                    result = e.partial_result
-                else:
-                    raise
+                # Return user-friendly error message
+                error_response = f"""I encountered an error while analyzing your data: {str(e)}
+
+**Troubleshooting steps**:
+1. **Check your data**: Make sure your CSV files are properly formatted
+2. **Simplify your question**: Try asking for basic information first
+3. **Check file size**: Very large files might cause issues
+4. **Try specific columns**: Instead of "analyze everything", ask about specific columns
+
+**Examples of good questions**:
+- "Show me the first 10 rows"
+- "What columns do I have?"
+- "Create a chart of [specific column name]"
+
+You can also check the Debug tab for more technical details."""
+
+                return {
+                    "messages": input_state["messages"] + [HumanMessage(content=error_response)],
+                    "output_image_paths": [],
+                    "intermediate_outputs": [f"Error: {str(e)}"],
+                    "token_usage": None
+                }
             
             self.chat_history = result["messages"]
             new_image_paths = set(result["output_image_paths"]) - starting_image_paths_set
@@ -157,6 +176,15 @@ class PythonChatbot:
             if "intermediate_outputs" in result:
                 self.intermediate_outputs.extend(result["intermediate_outputs"])
                 logger.info(f"Added {len(result['intermediate_outputs'])} intermediate outputs")
+            
+            # Store token usage for this conversation turn
+            if "token_usage" in result and result["token_usage"]:
+                self.token_usage_history.append({
+                    "timestamp": time.time(),
+                    "query": user_query,
+                    "usage": result["token_usage"]
+                })
+                logger.info(f"Token usage: {result['token_usage']}")
                 
             duration = time.time() - start_time
             logger.info(f"Successfully processed query in {duration:.2f} seconds")
@@ -165,8 +193,34 @@ class PythonChatbot:
             logger.error(f"Error processing query: {str(e)}")
             raise
 
+    def get_total_token_usage(self):
+        """Get cumulative token usage for the entire session"""
+        if not hasattr(self, 'token_usage_history') or not self.token_usage_history:
+            return None
+            
+        total = {
+            "total_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "estimated_cost": 0.0,
+            "total_requests": 0,
+            "session_start": min(entry["timestamp"] for entry in self.token_usage_history),
+            "last_request": max(entry["timestamp"] for entry in self.token_usage_history)
+        }
+        
+        for entry in self.token_usage_history:
+            usage = entry["usage"]
+            total["total_tokens"] += usage.get("total_tokens", 0)
+            total["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            total["completion_tokens"] += usage.get("completion_tokens", 0)
+            total["estimated_cost"] += usage.get("estimated_cost", 0.0)
+            total["total_requests"] += usage.get("requests", 1)
+            
+        return total
+
     def reset_chat(self):
         logger.info("Resetting chat history")
         self.chat_history = []
         self.intermediate_outputs = []
         self.output_image_paths = {}
+        self.token_usage_history = []
