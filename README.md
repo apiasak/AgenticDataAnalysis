@@ -18,18 +18,27 @@ https://www.kaggle.com/datasets/computingvictor/transactions-fraud-datasets/data
 
 Otherwise feel free to upload your own dataset!
 
-Youll then need to install the requirements by running the following command:
+## Setup Instructions
 
-```bash
-pip install -r requirements.txt
-```
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-and run the streamlit dashboard by running the following command:
+2. **Configure Environment Variables**
+   - Copy the example environment file:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` and add your OpenAI API key:
+     ```
+     OPENAI_API_KEY=your_actual_api_key_here
+     ```
+   - Get your API key from: https://platform.openai.com/api-keys
 
-```bash
-streamlit run data_analysis_streamlit_app.py --server.maxUploadSize 2000
-```
-
-Update the OpenAI API key in the data_analysis_streamlit_app.py file with your own.
+3. **Run the Application**
+   ```bash
+   streamlit run data_analysis_streamlit_app.py --server.maxUploadSize 2000
+   ```
 
 Enjoy!

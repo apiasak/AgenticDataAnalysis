@@ -56,15 +56,39 @@ def route_to_tools(
         return "tools"
     return "__end__"
 
-def call_model(state: AgentState):
+MAX_TOOL_CALLS = 128
 
+def call_model(state: AgentState):
+    # Create data summary
     current_data_template  = """The following data is available:\n{data_summary}"""
     current_data_message = HumanMessage(content=current_data_template.format(data_summary=create_data_summary(state)))
-    state["messages"] = [current_data_message] + state["messages"]
-
-    llm_outputs = model.invoke(state)
-
-    return {"messages": [llm_outputs], "intermediate_outputs": [current_data_message.content]}
+    
+    # Prepare messages ensuring we don't exceed context limits
+    messages = [current_data_message] + state["messages"]
+    if len(messages) > 10:  # Keep last 10 messages
+        messages = messages[:10]
+    
+    # Create limited state
+    limited_state = {
+        "messages": messages,
+        "input_data": state.get("input_data", []),
+        "current_variables": state.get("current_variables", [])
+    }
+    
+    # Invoke model with limited state
+    llm_outputs = model.invoke(limited_state)
+    
+    # Validate tool calls length
+    if hasattr(llm_outputs, "tool_calls") and len(llm_outputs.tool_calls) > MAX_TOOL_CALLS:
+        raise ValueError(
+            f"Too many tool calls generated ({len(llm_outputs.tool_calls)}). "
+            f"Maximum allowed is {MAX_TOOL_CALLS}."
+        )
+    
+    return {
+        "messages": [llm_outputs],
+        "intermediate_outputs": [current_data_message.content]
+    }
 
 def call_tools(state: AgentState):
     last_message = state["messages"][-1]
@@ -97,4 +121,3 @@ def call_tools(state: AgentState):
 
     state_updates["messages"] = tool_messages 
     return state_updates
-

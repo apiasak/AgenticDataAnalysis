@@ -1,6 +1,6 @@
 {
     "transactions_data.csv": {
-        "description": "Detailed transaction records including amounts, timestamps, and merchant details",
+        "description": "Detailed transaction records including amounts, timestamps, and merchant details\nCovers transactions throughout the 2010s\nLatest Transaction Date: October 31, 2019\nFeatures transaction types, amounts, and merchant information\nPerfect for analyzing spending patterns and building fraud detection models",
         "coverage": "Covers transactions throughout the 2010s",
         "features": [
             "transaction types",
@@ -10,7 +10,7 @@
         "usage": "Perfect for analyzing spending patterns and building fraud detection models"
     },
     "cards_data.csv": {
-        "description": "Credit and debit card details",
+        "description": "Credit and debit card details\nIncludes card limits, types, and activation dates\nLinks to customer accounts via card_id\nEssential for understanding customer financial profiles",
         "features": [
             "card limits",
             "types",
@@ -38,7 +38,7 @@
         "usage": "Ideal for training supervised fraud detection models"
     },
     "users_data.csv": {
-        "description": "Demographic information about customers",
+        "description": "Demographic information about customers\nAccount-related details\nEnables customer segmentation and personalized analysis\n",
         "details": [
             "Account-related details"
         ],

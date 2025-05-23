@@ -10,3 +10,13 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+.env.staging
+*.key
+
+# Generated visualization files
+images/
+uploads/

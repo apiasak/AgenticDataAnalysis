@@ -144,8 +144,13 @@ with tab2:
                     if isinstance(msg, AIMessage) and msg_index in st.session_state.visualisation_chatbot.output_image_paths:
                         image_paths = st.session_state.visualisation_chatbot.output_image_paths[msg_index]
                         for image_path in image_paths:
-                            with open(os.path.join("images/plotly_figures/pickle", image_path), "rb") as f:
-                                fig = pickle.load(f)
+                            if image_path.endswith('.json'):
+                                with open(os.path.join("images/plotly_figures/pickle", image_path), "r") as f:
+                                    fig_json = f.read()
+                                    fig = pio.from_json(fig_json)
+                            else:
+                                with open(os.path.join("images/plotly_figures/pickle", image_path), "rb") as f:
+                                    fig = pickle.load(f)
                             st.plotly_chart(fig, use_container_width=True)
         # Chat input
         st.chat_input(placeholder="Ask me anything about your data", on_submit=on_submit_user_query, key='user_input')

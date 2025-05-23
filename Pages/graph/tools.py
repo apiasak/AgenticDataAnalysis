@@ -18,13 +18,35 @@ repl = PythonREPL()
 
 persistent_vars = {}
 plotly_saving_code = """import pickle
+import json
 import uuid
 import plotly
+import pandas as pd
+import plotly.io as pio
+
+def convert_periods(obj):
+    if isinstance(obj, pd.Period):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_periods(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_periods(x) for x in obj]
+    return obj
 
 for figure in plotly_figures:
-    pickle_filename = f"images/plotly_figures/pickle/{uuid.uuid4()}.pickle"
-    with open(pickle_filename, 'wb') as f:
-        pickle.dump(figure, f)
+    # Try JSON serialization first
+    try:
+        # Convert figure to JSON using plotly's built-in function
+        figure_json = pio.to_json(figure)
+        json_filename = f"images/plotly_figures/pickle/{uuid.uuid4()}.json"
+        with open(json_filename, 'w') as f:
+            f.write(figure_json)
+    except Exception as json_error:
+        # Fall back to pickle if JSON fails
+        figure = convert_periods(figure)
+        pickle_filename = f"images/plotly_figures/pickle/{uuid.uuid4()}.pickle"
+        with open(pickle_filename, 'wb') as f:
+            pickle.dump(figure, f)
 """
 
 @tool(parse_docstring=True)
@@ -38,9 +60,59 @@ def complete_python_task(
         python_code: Python code to be executed to perform analyses, create a new dataset or create a visualization.
     """
     current_variables = graph_state["current_variables"] if "current_variables" in graph_state else {}
+    
+    # Load all datasets with automatic naming
+    datasets = []
     for input_dataset in graph_state["input_data"]:
-        if input_dataset.variable_name not in current_variables:
-            current_variables[input_dataset.variable_name] = pd.read_csv(input_dataset.data_path)
+        try:
+            df = pd.read_csv(input_dataset.data_path)
+            var_name = f"dataset_{len(datasets)}"
+            current_variables[var_name] = df
+            datasets.append({
+                'name': var_name,
+                'data': df,
+                'size': len(df),
+                'types': df.dtypes.to_dict(),
+                'sample': df.head(1).to_dict(orient='records')[0]
+            })
+        except Exception as e:
+            return f"Error loading dataset: {str(e)}", {
+                "intermediate_outputs": [{
+                    "error": f"Failed to load dataset {input_dataset.data_path}",
+                    "details": str(e)
+                }]
+            }
+    
+    # Create generic relationships between datasets
+    if len(datasets) > 1:
+        try:
+            # Create combined views based on data patterns
+            numeric_cols = {}
+            date_cols = {}
+            
+            for ds in datasets:
+                for col, dtype in ds['types'].items():
+                    if 'float' in str(dtype) or 'int' in str(dtype):
+                        numeric_cols.setdefault('numeric', []).append(f"{ds['name']}.{col}")
+                    if 'datetime' in str(dtype) or 'date' in str(dtype):
+                        date_cols.setdefault('date', []).append(f"{ds['name']}.{col}")
+            
+            # Store relationship metadata
+            current_variables["_metadata"] = {
+                'datasets': datasets,
+                'relationships': {
+                    'numeric_columns': numeric_cols,
+                    'date_columns': date_cols
+                }
+            }
+            
+        except Exception as e:
+            return f"Error creating dataset relationships: {str(e)}", {
+                "intermediate_outputs": [{
+                    "error": "Failed to create dataset relationships",
+                    "details": str(e)
+                }]
+            }
     if not os.path.exists("images/plotly_figures/pickle"):
         os.makedirs("images/plotly_figures/pickle")
 
